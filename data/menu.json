@@ -1,0 +1,32 @@
+{
+  "menu": [
+    {
+      "category": "Burgers",
+      "items": [
+        {
+          "name": "Classic Cheeseburger",
+          "price": "$8.99",
+          "description": "Beef patty with cheddar cheese, lettuce, tomato, and house sauce."
+        },
+        {
+          "name": "Veggie Burger",
+          "price": "$7.99",
+          "description": "Grilled veggie patty with avocado and chipotle mayo."
+        }
+      ]
+    },
+    {
+      "category": "Drinks",
+      "items": [
+        {
+          "name": "Iced Tea",
+          "price": "$2.50"
+        },
+        {
+          "name": "Lemonade",
+          "price": "$2.75"
+        }
+      ]
+    }
+  ]
+} 
