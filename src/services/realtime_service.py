@@ -447,13 +447,20 @@ Remember: Your responses will be converted to speech, so write them as you would
         """
         try:
             # Import here to avoid circular imports
-            from src.services.menu_service import menu_service
+            from src.services.api_menu_service import api_menu_service
             
-            if menu_service.is_menu_related_query(query):
-                return menu_service.process_menu_query(query)
+            if api_menu_service.is_menu_related_query(query):
+                return await api_menu_service.process_menu_query(query)
                 
         except Exception as e:
-            self.logger.warning(f"⚠️ Could not load menu service: {e}")
+            self.logger.warning(f"⚠️ Could not load API menu service: {e}")
+            # Fallback to static menu service
+            try:
+                from src.services.menu_service import menu_service
+                if menu_service.is_menu_related_query(query):
+                    return menu_service.process_menu_query(query)
+            except Exception as fallback_e:
+                self.logger.warning(f"⚠️ Could not load fallback menu service: {fallback_e}")
             
         return None
 

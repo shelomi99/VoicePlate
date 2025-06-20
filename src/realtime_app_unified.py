@@ -133,7 +133,7 @@ async def process_speech(
     Handle speech processing for traditional voice interactions.
     This endpoint processes user speech and generates AI responses.
     """
-    return await realtime_server.handle_speech_processing(request, speech_data)
+    return await realtime_server.process_speech(request)
 
 @app.post('/stream/status')
 async def stream_status(

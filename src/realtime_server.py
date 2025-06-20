@@ -27,6 +27,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config.settings import settings
 from src.services.realtime_service import RealtimeService
+from src.services.openai_service import openai_service
 
 # Configure logging
 logging.basicConfig(
@@ -202,132 +203,140 @@ class RealtimeServer:
         
         return Response(content=twiml_content, media_type='text/xml')
 
-    async def handle_speech_processing(self, request: Request, speech_data: Dict[str, str]) -> Response:
-        """Handle speech processing for traditional voice interactions."""
+    async def process_speech(self, request: Request) -> Response:
+        """Process speech input from Twilio and generate AI response."""
         
-        call_sid = speech_data.get('CallSid', '')
-        speech_result = speech_data.get('SpeechResult', '').strip()
-        confidence = speech_data.get('Confidence', '0')
+        # Parse request data
+        form_data = await request.form()
+        call_sid = str(form_data.get("CallSid", ""))
+        speech_result = str(form_data.get("SpeechResult", "")).strip()
+        confidence_str = str(form_data.get("Confidence", "0"))
         
-        # Validate call_sid
+        try:
+            confidence = float(confidence_str)
+        except (ValueError, TypeError):
+            confidence = 0.0
+        
         if not call_sid:
-            self.logger.error("❌ Missing CallSid in speech data")
-            response = VoiceResponse()
-            response.say("Sorry, there was an error processing your request.", voice=getattr(settings, 'voice_type', 'alice'))
-            response.hangup()
-            return Response(content=str(response), media_type='text/xml')
+            self.logger.error("❌ No CallSid provided in speech processing request")
+            return self._create_error_response("Missing call information")
+        
+        if not speech_result:
+            self.logger.warning(f"⚠️ No speech result for call {call_sid}")
+            return self._create_no_input_response()
         
         self.logger.info(f"🎤 Speech processing for call {call_sid}: '{speech_result}' (confidence: {confidence})")
         
-        try:
-            response = VoiceResponse()
-            
-            if not speech_result:
-                # No speech detected
-                response.say(
-                    "I didn't hear anything. Please speak clearly and tell me how I can help you.",
-                    voice=getattr(settings, 'voice_type', 'alice'),
-                    language='en-US'
-                )
-                
-                # Try to gather again
-                gather = response.gather(
-                    input='speech',
-                    action=f"{getattr(settings, 'base_webhook_url', f'http://{settings.host}:{settings.port}')}/process-speech",
-                    speech_timeout='auto',
-                    timeout=10,
-                    method='POST'
-                )
-                
-                # Final fallback
-                response.say(
-                    "Thank you for calling VoicePlate. Please call back if you need assistance.",
-                    voice=getattr(settings, 'voice_type', 'alice'),
-                    language='en-US'
-                )
-                response.hangup()
-                
-            else:
-                # Process the speech with AI
-                ai_response = await self._process_user_speech(call_sid, speech_result)
-                
-                # Say the AI response
-                response.say(
-                    ai_response,
-                    voice=getattr(settings, 'voice_type', 'alice'),
-                    language='en-US'
-                )
-                
-                # Check if user wants to continue the conversation
-                gather = response.gather(
-                    input='speech',
-                    action=f"{getattr(settings, 'base_webhook_url', f'http://{settings.host}:{settings.port}')}/process-speech",
-                    speech_timeout='auto',
-                    timeout=8,
-                    method='POST'
-                )
-                
-                gather.say(
-                    "Is there anything else I can help you with today?",
-                    voice=getattr(settings, 'voice_type', 'alice'),
-                    language='en-US'
-                )
-                
-                # End conversation if no response
-                response.say(
-                    "Thank you for calling VoicePlate! Have a great day!",
-                    voice=getattr(settings, 'voice_type', 'alice'),
-                    language='en-US'
-                )
-                response.hangup()
-            
-            twiml_content = str(response)
-            self.logger.info(f"✅ Speech response for call {call_sid}")
-            
-            return Response(content=twiml_content, media_type='text/xml')
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error processing speech for {call_sid}: {e}")
-            
-            # Error fallback
-            response = VoiceResponse()
-            response.say(
-                "I'm sorry, I had trouble understanding your request. Please try calling back.",
-                voice=getattr(settings, 'voice_type', 'alice'),
-                language='en-US'
-            )
-            response.hangup()
-            
-            return Response(content=str(response), media_type='text/xml')
-
-    async def _process_user_speech(self, call_sid: str, user_speech: str) -> str:
-        """Process user speech and generate AI response."""
+        # Get conversation history for this call
+        conversation_history = self.call_sessions.get(call_sid, {}).get('conversation_history', [])
         
+        # Process with OpenAI (now async)
         try:
-            # Get conversation history for this call
-            call_session = self.call_sessions.get(call_sid, {})
-            conversation_history = call_session.get('conversation_history', [])
-            
-            # Import OpenAI service
-            from src.services.openai_service import openai_service
-            
-            # Generate AI response
-            ai_response, updated_history = openai_service.process_conversation_turn(
-                user_speech, 
-                conversation_history
+            ai_response, updated_history = await openai_service.process_conversation_turn(
+                speech_result, conversation_history
             )
             
             # Update conversation history
             if call_sid in self.call_sessions:
                 self.call_sessions[call_sid]['conversation_history'] = updated_history
             
-            self.logger.info(f"🤖 AI response for {call_sid}: {ai_response[:100]}...")
-            
-            return ai_response
-            
         except Exception as e:
-            self.logger.error(f"❌ Error generating AI response for {call_sid}: {e}")
-            return "I'm sorry, I'm having trouble processing your request right now. Please try asking again or call back later."
+            self.logger.error(f"❌ Error processing conversation: {e}")
+            ai_response = "I'm sorry, I encountered an issue. Could you please repeat your question?"
+        
+        self.logger.info(f"🤖 AI response for {call_sid}: {ai_response[:100]}...")
+        
+        # Create TwiML response
+        response = VoiceResponse()
+        
+        # Add AI response
+        response.say(
+            ai_response,
+            voice=getattr(settings, 'voice_type', 'alice'),
+            language=getattr(settings, 'language', 'en-US')
+        )
+        
+        # Continue conversation or end call based on response
+        if self._should_continue_conversation(ai_response):
+            # Gather more input
+            gather = response.gather(
+                input='speech',
+                action=f"{getattr(settings, 'base_webhook_url', f'http://{settings.host}:{settings.port}')}/process-speech",
+                speech_timeout='auto',
+                timeout=10,
+                method='POST'
+            )
+        else:
+            # End the call
+            response.say("Thank you for calling VoicePlate! Have a great day!")
+            response.hangup()
+        
+        twiml_content = str(response)
+        self.logger.info(f"✅ Speech response for call {call_sid}")
+        
+        return Response(content=twiml_content, media_type='text/xml')
+
+    def _create_error_response(self, error_message: str) -> Response:
+        """Create an error response TwiML."""
+        response = VoiceResponse()
+        response.say(
+            "Sorry, there was an error processing your request. Please try again.",
+            voice=getattr(settings, 'voice_type', 'alice'),
+            language=getattr(settings, 'language', 'en-US')
+        )
+        response.hangup()
+        return Response(content=str(response), media_type='text/xml')
+
+    def _create_no_input_response(self) -> Response:
+        """Create a response for when no speech input is detected."""
+        response = VoiceResponse()
+        response.say(
+            "I didn't hear anything. Please speak clearly and tell me how I can help you.",
+            voice=getattr(settings, 'voice_type', 'alice'),
+            language=getattr(settings, 'language', 'en-US')
+        )
+        
+        # Try to gather again
+        gather = response.gather(
+            input='speech',
+            action=f"{getattr(settings, 'base_webhook_url', f'http://{settings.host}:{settings.port}')}/process-speech",
+            speech_timeout='auto',
+            timeout=10,
+            method='POST'
+        )
+        
+        # Final fallback
+        response.say(
+            "Thank you for calling VoicePlate. Please call back if you need assistance.",
+            voice=getattr(settings, 'voice_type', 'alice'),
+            language=getattr(settings, 'language', 'en-US')
+        )
+        response.hangup()
+        
+        return Response(content=str(response), media_type='text/xml')
+
+    def _should_continue_conversation(self, ai_response: str) -> bool:
+        """Determine if the conversation should continue based on the AI response."""
+        # Define end-of-conversation indicators
+        end_phrases = [
+            "thank you for calling",
+            "have a great day",
+            "goodbye",
+            "call back",
+            "talk to a human",
+            "transfer you",
+            "end this call"
+        ]
+        
+        response_lower = ai_response.lower()
+        
+        # Check if response contains end phrases
+        for phrase in end_phrases:
+            if phrase in response_lower:
+                return False
+        
+        # Continue conversation by default
+        return True
 
     async def handle_stream_status(self, request: Request, status_data: Dict[str, str]) -> JSONResponse:
         """Handle Media Stream status callbacks from Twilio."""

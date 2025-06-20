@@ -154,13 +154,27 @@ class WebSocketHandler:
             
             # Add menu context to system message if available
             try:
-                from src.services.menu_service import menu_service
-                if hasattr(menu_service, 'get_menu_context'):
-                    menu_info = menu_service.get_menu_context()
-                    if menu_info:
-                        config.system_message += f"\n\nCurrent menu information: {menu_info}"
+                from src.services.api_menu_service import api_menu_service
+                # Pre-load menu data for faster responses
+                menu_data = await api_menu_service.get_menu_data()
+                if menu_data:
+                    # Add a condensed menu summary to system message
+                    categories = list(menu_data.get('categories', {}).values())
+                    if categories:
+                        category_names = [cat['name'] for cat in categories if cat.get('active', False)]
+                        menu_summary = f"Available menu categories: {', '.join(category_names)}"
+                        config.system_message += f"\n\nCurrent menu information: {menu_summary}\n\nUse the menu service to get detailed information when customers ask about specific items."
             except Exception as e:
-                self.logger.warning(f"⚠️ Could not load menu context: {e}")
+                self.logger.warning(f"⚠️ Could not load API menu context: {e}")
+                # Fallback to static menu service
+                try:
+                    from src.services.menu_service import menu_service
+                    if hasattr(menu_service, 'get_menu_context'):
+                        menu_info = menu_service.get_menu_context()
+                        if menu_info:
+                            config.system_message += f"\n\nCurrent menu information: {menu_info}"
+                except Exception as fallback_e:
+                    self.logger.warning(f"⚠️ Could not load fallback menu context: {fallback_e}")
             
             # Create and connect session
             session = await realtime_service.create_session(session_id, config)

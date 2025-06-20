@@ -33,16 +33,77 @@ Key guidelines:
 - Avoid using special characters, formatting, or lists in responses
 - Keep responses conversational and easy to understand when spoken
 
+⚠️ CRITICAL MENU RULES - FOLLOW EXACTLY:
+- ONLY mention products that are EXPLICITLY listed in the provided menu context
+- NEVER mention coffee, tea, burgers, sandwiches, or any items unless they appear in the exact menu list
+- If asked about items not in the menu context, say "We don't currently have [item] available"
+- If the menu context says "We don't have X", repeat that information accurately
+- DO NOT invent, assume, or suggest any food/drink items not specifically provided
+- When in doubt, be honest about what's actually available
+
 You can help with:
-- Menu information and pricing
+- Menu information and pricing (only for items actually on the menu)
 - General information and questions
 - Basic customer service inquiries  
 - Routing calls to appropriate departments
 - Taking messages and contact information
 
-For menu-related questions, you have access to current menu information that will be provided when needed.
-
 Remember: Your responses will be converted to speech, so write them as you would speak them."""
+
+    def _validate_response_against_menu(self, ai_response: str, menu_context: Optional[str]) -> str:
+        """
+        Validate AI response to ensure it only mentions products from the menu context.
+        
+        Args:
+            ai_response: The AI's generated response
+            menu_context: The menu context that was provided to the AI
+            
+        Returns:
+            Validated response (corrected if necessary)
+        """
+        if not menu_context:
+            return ai_response
+        
+        # Common problematic products that AI tends to hallucinate
+        prohibited_items = [
+            'coffee', 'tea', 'soda', 'burger', 'sandwich', 'salad', 'wrap', 
+            'fries', 'chips', 'soup', 'pasta', 'chicken', 'beef', 'fish',
+            'bread', 'toast', 'bagel', 'muffin', 'cookie', 'brownie',
+            'smoothie', 'latte', 'cappuccino', 'espresso', 'juice',
+            'water', 'cola', 'pepsi', 'sprite', 'beer', 'wine'
+        ]
+        
+        ai_response_lower = ai_response.lower()
+        
+        # Check if AI mentioned prohibited items
+        mentioned_prohibited = []
+        for item in prohibited_items:
+            if item in ai_response_lower and item not in menu_context.lower():
+                mentioned_prohibited.append(item)
+        
+        # If AI mentioned prohibited items, provide a corrected response
+        if mentioned_prohibited:
+            self.logger.warning(f"⚠️ AI mentioned prohibited items: {mentioned_prohibited}")
+            
+            # Extract actual products from menu context
+            actual_products = []
+            if "Watermelon Granita" in menu_context:
+                actual_products.append("Watermelon Granita")
+            if "Vanilla Ice Cream" in menu_context:
+                actual_products.append("Vanilla Ice Cream")
+            if "Tiramisu" in menu_context:
+                actual_products.append("Tiramisu")
+            if "Chocolate Cake" in menu_context:
+                actual_products.append("Chocolate Cake")
+            if "Pizza" in menu_context:
+                actual_products.append("Pizza")
+            
+            if actual_products:
+                return f"Our available items include {', '.join(actual_products)}. We don't currently have {', '.join(mentioned_prohibited[:2])} available."
+            else:
+                return "I'm sorry, let me check our current menu availability for you."
+        
+        return ai_response
 
     def generate_response(self, user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None, menu_context: Optional[str] = None) -> str:
         """
@@ -62,7 +123,22 @@ Remember: Your responses will be converted to speech, so write them as you would
             
             # Add menu context if provided
             if menu_context:
-                menu_system_message = f"Current menu information: {menu_context}\n\nUse this information to answer the user's menu-related question. Keep your response conversational and easy to understand when spoken aloud."
+                menu_system_message = f"""🚨 STRICT MENU INFORMATION - READ CAREFULLY:
+{menu_context}
+
+🚫 ABSOLUTE RESTRICTIONS:
+- The above menu information is COMPLETE and EXHAUSTIVE
+- Do NOT mention any items that are not listed above
+- Do NOT mention: coffee, tea, burgers, sandwiches, or any common restaurant items unless explicitly listed
+- If asked about items not listed above, respond with "We don't currently have [item] available"
+- If the menu context above says "We don't have X", use that exact information
+
+✅ ONLY USE:
+- Products explicitly named in the menu context above
+- Prices exactly as provided above
+- Information about availability exactly as stated above
+
+Keep your response conversational and easy to understand when spoken aloud."""
                 messages.append({"role": "system", "content": menu_system_message})
             
             # Add conversation history if provided
@@ -79,7 +155,7 @@ Remember: Your responses will be converted to speech, so write them as you would
                 model=self.model,
                 messages=messages,  # type: ignore
                 max_tokens=150,  # Keep responses concise for voice
-                temperature=0.7,
+                temperature=0.3,  # Lower temperature for more accurate responses
                 top_p=0.9
             )
             
@@ -87,7 +163,7 @@ Remember: Your responses will be converted to speech, so write them as you would
             if ai_response:
                 ai_response = ai_response.strip()
                 self.logger.info(f"✅ AI response generated: {ai_response[:50]}...")
-                return ai_response
+                return self._validate_response_against_menu(ai_response, menu_context)
             else:
                 return "I apologize, but I'm having trouble processing your request right now. Please try again or hold for a human representative."
             
@@ -163,7 +239,7 @@ Remember: Your responses will be converted to speech, so write them as you would
             self.logger.error(f"❌ Error converting text to speech: {str(e)}")
             return None
 
-    def process_conversation_turn(self, user_input: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Tuple[str, List[Dict[str, str]]]:
+    async def process_conversation_turn(self, user_input: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Tuple[str, List[Dict[str, str]]]:
         """
         Process a complete conversation turn: generate AI response and update history.
         
@@ -178,12 +254,20 @@ Remember: Your responses will be converted to speech, so write them as you would
             # Check if this is a menu-related query
             menu_context = None
             try:
-                from src.services.menu_service import menu_service
-                if menu_service.is_menu_related_query(user_input):
-                    menu_context = menu_service.process_menu_query(user_input)
+                from src.services.api_menu_service import api_menu_service
+                if api_menu_service.is_menu_related_query(user_input):
+                    menu_context = await api_menu_service.process_menu_query(user_input)
                     self.logger.info(f"🍽️ Menu context provided for query: {user_input[:30]}...")
             except Exception as e:
-                self.logger.warning(f"⚠️ Could not load menu service: {e}")
+                self.logger.warning(f"⚠️ Could not load API menu service: {e}")
+                # Fallback to static menu service
+                try:
+                    from src.services.menu_service import menu_service
+                    if menu_service.is_menu_related_query(user_input):
+                        menu_context = menu_service.process_menu_query(user_input)
+                        self.logger.info(f"🍽️ Fallback menu context provided for query: {user_input[:30]}...")
+                except Exception as fallback_e:
+                    self.logger.warning(f"⚠️ Could not load fallback menu service: {fallback_e}")
             
             # Generate AI response with menu context if applicable
             ai_response = self.generate_response(user_input, conversation_history, menu_context)
