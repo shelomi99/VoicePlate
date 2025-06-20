@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # OpenAI Realtime API Configuration - NEW
     openai_realtime_model: str = Field(default="gpt-4o-realtime-preview-2024-10-01", alias="OPENAI_REALTIME_MODEL")
-    realtime_voice: str = Field(default="alloy", alias="REALTIME_VOICE")
+    realtime_voice: str = Field(default="nova", alias="REALTIME_VOICE")
     realtime_temperature: float = Field(default=0.8, alias="REALTIME_TEMPERATURE")
     realtime_max_tokens: Optional[int] = Field(default=None, alias="REALTIME_MAX_TOKENS")
     realtime_turn_detection: str = Field(default="server_vad", alias="REALTIME_TURN_DETECTION")
@@ -52,10 +52,10 @@ class Settings(BaseSettings):
     
     # Voice Assistant Configuration
     greeting_message: str = Field(
-        default="Hello! Welcome to VoicePlate, your AI-powered assistant. I'm here to help answer your questions. Please tell me how I can assist you today.",
+        default="Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.",
         alias="GREETING_MESSAGE"
     )
-    voice_type: str = Field(default="alice", alias="VOICE_TYPE")
+    voice_type: str = Field(default="Polly.Joanna", alias="VOICE_TYPE")
     language: str = Field(default="en-US", alias="LANGUAGE")
     
     # WebSocket Configuration - NEW

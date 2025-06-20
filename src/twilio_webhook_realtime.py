@@ -66,7 +66,7 @@ def handle_realtime_voice_call():
     
     # Welcome message
     response.say(
-        "Welcome to VoicePlate! I'm connecting you to our AI assistant for a real-time conversation.",
+        "Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.",
         voice=getattr(settings, 'voice_type', 'alice'),
         language=getattr(settings, 'language', 'en-US')
     )

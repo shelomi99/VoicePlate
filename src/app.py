@@ -36,7 +36,7 @@ except ImportError as e:
         twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
         twilio_phone_number = os.getenv("TWILIO_PHONE_NUMBER", "")
         openai_model = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
-        greeting_message = os.getenv("GREETING_MESSAGE", "Hello! Welcome to VoicePlate, your AI-powered assistant. I'm here to help answer your questions. Please tell me how I can assist you today.")
+        greeting_message = os.getenv("GREETING_MESSAGE", "Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.")
         voice_type = os.getenv("VOICE_TYPE", "alice")
         language = os.getenv("LANGUAGE", "en-US")
     

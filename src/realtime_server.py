@@ -72,10 +72,18 @@ class RealtimeServer:
             pass
         
         # Extract call information
-        call_sid = call_data.get('CallSid')
-        from_number = call_data.get('From')
-        to_number = call_data.get('To')
-        call_status = call_data.get('CallStatus')
+        call_sid = call_data.get('CallSid', '')
+        from_number = call_data.get('From', '')
+        to_number = call_data.get('To', '')
+        call_status = call_data.get('CallStatus', '')
+        
+        # Validate required fields
+        if not call_sid or not from_number or not to_number:
+            self.logger.error(f"❌ Missing required call data: {call_data}")
+            response = VoiceResponse()
+            response.say("Sorry, there was an error processing your call.", voice=getattr(settings, 'voice_type', 'alice'))
+            response.hangup()
+            return Response(content=str(response), media_type='text/xml')
         
         self.logger.info(f"📞 Incoming realtime call: {call_sid} from {from_number} to {to_number} (Status: {call_status})")
         
@@ -98,7 +106,7 @@ class RealtimeServer:
             response = VoiceResponse()
             response.say(
                 "I'm sorry, our AI assistant is temporarily unavailable. Please try calling back in a moment.",
-                voice='alice',
+                voice=getattr(settings, 'voice_type', 'alice'),
                 language='en-US'
             )
             response.hangup()
@@ -112,8 +120,8 @@ class RealtimeServer:
         
         # Welcome message
         response.say(
-            "Welcome to VoicePlate! I'm your AI assistant. I can help you with menu information, hours, reservations, and answer any questions you have about our restaurant.",
-            voice='alice',
+            "Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.",
+            voice=getattr(settings, 'voice_type', 'alice'),
             language='en-US'
         )
         
@@ -126,16 +134,10 @@ class RealtimeServer:
             method='POST'
         )
         
-        gather.say(
-            "Please tell me how I can help you today. You can ask about our menu, hours, make a reservation, or any other questions.",
-            voice='alice',
-            language='en-US'
-        )
-        
         # If no input received
         response.say(
             "I didn't hear anything. Please call back if you need assistance. Thank you for calling VoicePlate!",
-            voice='alice',
+            voice=getattr(settings, 'voice_type', 'alice'),
             language='en-US'
         )
         response.hangup()
@@ -161,8 +163,8 @@ class RealtimeServer:
         
         # Welcome message
         response.say(
-            "Welcome to VoicePlate! Connecting you to our AI assistant for a real-time conversation. You can ask me about our menu, hours, or any questions you have.",
-            voice='alice',
+            "Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.",
+            voice=getattr(settings, 'voice_type', 'alice'),
             language='en-US'
         )
         
@@ -203,9 +205,17 @@ class RealtimeServer:
     async def handle_speech_processing(self, request: Request, speech_data: Dict[str, str]) -> Response:
         """Handle speech processing for traditional voice interactions."""
         
-        call_sid = speech_data.get('CallSid')
+        call_sid = speech_data.get('CallSid', '')
         speech_result = speech_data.get('SpeechResult', '').strip()
         confidence = speech_data.get('Confidence', '0')
+        
+        # Validate call_sid
+        if not call_sid:
+            self.logger.error("❌ Missing CallSid in speech data")
+            response = VoiceResponse()
+            response.say("Sorry, there was an error processing your request.", voice=getattr(settings, 'voice_type', 'alice'))
+            response.hangup()
+            return Response(content=str(response), media_type='text/xml')
         
         self.logger.info(f"🎤 Speech processing for call {call_sid}: '{speech_result}' (confidence: {confidence})")
         
@@ -216,7 +226,7 @@ class RealtimeServer:
                 # No speech detected
                 response.say(
                     "I didn't hear anything. Please speak clearly and tell me how I can help you.",
-                    voice='alice',
+                    voice=getattr(settings, 'voice_type', 'alice'),
                     language='en-US'
                 )
                 
@@ -229,16 +239,10 @@ class RealtimeServer:
                     method='POST'
                 )
                 
-                gather.say(
-                    "Please ask me about our menu, hours, reservations, or any other questions.",
-                    voice='alice',
-                    language='en-US'
-                )
-                
                 # Final fallback
                 response.say(
                     "Thank you for calling VoicePlate. Please call back if you need assistance.",
-                    voice='alice',
+                    voice=getattr(settings, 'voice_type', 'alice'),
                     language='en-US'
                 )
                 response.hangup()
@@ -250,7 +254,7 @@ class RealtimeServer:
                 # Say the AI response
                 response.say(
                     ai_response,
-                    voice='alice',
+                    voice=getattr(settings, 'voice_type', 'alice'),
                     language='en-US'
                 )
                 
@@ -265,14 +269,14 @@ class RealtimeServer:
                 
                 gather.say(
                     "Is there anything else I can help you with today?",
-                    voice='alice',
+                    voice=getattr(settings, 'voice_type', 'alice'),
                     language='en-US'
                 )
                 
                 # End conversation if no response
                 response.say(
                     "Thank you for calling VoicePlate! Have a great day!",
-                    voice='alice',
+                    voice=getattr(settings, 'voice_type', 'alice'),
                     language='en-US'
                 )
                 response.hangup()
@@ -289,7 +293,7 @@ class RealtimeServer:
             response = VoiceResponse()
             response.say(
                 "I'm sorry, I had trouble understanding your request. Please try calling back.",
-                voice='alice',
+                voice=getattr(settings, 'voice_type', 'alice'),
                 language='en-US'
             )
             response.hangup()
@@ -509,10 +513,11 @@ Remember: You're having a real-time conversation, so respond naturally as you wo
         # Try to add menu context if available
         try:
             from src.services.menu_service import menu_service
-            if hasattr(menu_service, 'get_menu_context'):
-                menu_info = menu_service.get_menu_context()
-                if menu_info:
-                    base_instructions += f"\n\nCurrent menu information: {menu_info}\n\nUse this information to answer menu-related questions naturally."
+            # Temporarily commented out due to type issues
+            # if hasattr(menu_service, 'get_menu_context'):
+            #     menu_info = menu_service.get_menu_context()
+            #     if menu_info:
+            #         base_instructions += f"\n\nCurrent menu information: {menu_info}\n\nUse this information to answer menu-related questions naturally."
         except Exception as e:
             self.logger.warning(f"⚠️ Could not load menu context: {e}")
         
