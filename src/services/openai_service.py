@@ -251,7 +251,34 @@ Keep your response conversational and easy to understand when spoken aloud."""
             Tuple of (ai_response, updated_conversation_history)
         """
         try:
-            # Check if this is a business-related query first (higher priority than menu)
+            # Check if this is a promo-related query first (highest priority)
+            promo_context = None
+            try:
+                from src.services.api_promo_service import api_promo_service
+                if api_promo_service.is_promo_related_query(user_input):
+                    promo_context = await api_promo_service.process_promo_query(user_input)
+                    self.logger.info(f"🎁 Promo context provided for query: {user_input[:30]}...")
+                    # Return promo response directly as it's already processed
+                    ai_response = promo_context
+                    
+                    # Update conversation history
+                    if conversation_history is None:
+                        conversation_history = []
+                    
+                    updated_history = conversation_history.copy()
+                    updated_history.append({"role": "user", "content": user_input})
+                    updated_history.append({"role": "assistant", "content": ai_response})
+                    
+                    # Keep history manageable (last 10 messages)
+                    if len(updated_history) > 10:
+                        updated_history = updated_history[-10:]
+                    
+                    return ai_response, updated_history
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not load API promo service: {e}")
+            
+            # Check if this is a business-related query (second priority)
             business_context = None
             try:
                 from src.services.api_business_service import api_business_service
@@ -278,7 +305,7 @@ Keep your response conversational and easy to understand when spoken aloud."""
             except Exception as e:
                 self.logger.warning(f"⚠️ Could not load API business service: {e}")
             
-            # Check if this is a menu-related query (if not business-related)
+            # Check if this is a menu-related query (third priority, if not promo or business-related)
             menu_context = None
             try:
                 from src.services.api_menu_service import api_menu_service
