@@ -176,6 +176,36 @@ class WebSocketHandler:
                 except Exception as fallback_e:
                     self.logger.warning(f"⚠️ Could not load fallback menu context: {fallback_e}")
             
+            # Add business context to system message if available
+            try:
+                from src.services.api_business_service import api_business_service
+                # Pre-load business data for faster responses
+                business_data = await api_business_service.get_business_data()
+                if business_data:
+                    # Add business info summary to system message
+                    business_info_parts = []
+                    
+                    # Add delivery information
+                    if business_data.get('deliverySupported'):
+                        business_info_parts.append("We offer delivery service.")
+                    else:
+                        business_info_parts.append("We don't currently offer delivery service.")
+                    
+                    # Add today's store hours if available
+                    current_day = api_business_service._get_current_day_of_week()
+                    open_hours = business_data.get('openHours', [])
+                    if open_hours:
+                        today_hours = api_business_service._get_hours_for_day(open_hours, current_day)
+                        if today_hours:
+                            time_range = api_business_service._format_time_range(today_hours)
+                            business_info_parts.append(f"Today's hours: {time_range}.")
+                    
+                    if business_info_parts:
+                        business_summary = " ".join(business_info_parts)
+                        config.system_message += f"\n\nCurrent business information: {business_summary}\n\nUse the business service when customers ask about hours, delivery, or restaurant details."
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not load API business context: {e}")
+            
             # Create and connect session
             session = await realtime_service.create_session(session_id, config)
             connected = await realtime_service.connect_to_openai(session_id)

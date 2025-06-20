@@ -464,6 +464,28 @@ Remember: Your responses will be converted to speech, so write them as you would
             
         return None
 
+    async def get_business_context(self, query: str) -> Optional[str]:
+        """
+        Get business context for a query (integrates with business service).
+        
+        Args:
+            query: User's business-related query
+            
+        Returns:
+            Business context string or None
+        """
+        try:
+            # Import here to avoid circular imports
+            from src.services.api_business_service import api_business_service
+            
+            if api_business_service.is_business_related_query(query):
+                return await api_business_service.process_business_query(query)
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not load API business service: {e}")
+            
+        return None
+
     async def close_session(self, session_id: str):
         """Close a streaming session and cleanup resources."""
         if session_id not in self.sessions:

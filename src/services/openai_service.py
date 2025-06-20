@@ -251,7 +251,34 @@ Keep your response conversational and easy to understand when spoken aloud."""
             Tuple of (ai_response, updated_conversation_history)
         """
         try:
-            # Check if this is a menu-related query
+            # Check if this is a business-related query first (higher priority than menu)
+            business_context = None
+            try:
+                from src.services.api_business_service import api_business_service
+                if api_business_service.is_business_related_query(user_input):
+                    business_context = await api_business_service.process_business_query(user_input)
+                    self.logger.info(f"🏪 Business context provided for query: {user_input[:30]}...")
+                    # Return business response directly as it's already processed
+                    ai_response = business_context
+                    
+                    # Update conversation history
+                    if conversation_history is None:
+                        conversation_history = []
+                    
+                    updated_history = conversation_history.copy()
+                    updated_history.append({"role": "user", "content": user_input})
+                    updated_history.append({"role": "assistant", "content": ai_response})
+                    
+                    # Keep history manageable (last 10 messages)
+                    if len(updated_history) > 10:
+                        updated_history = updated_history[-10:]
+                    
+                    return ai_response, updated_history
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️ Could not load API business service: {e}")
+            
+            # Check if this is a menu-related query (if not business-related)
             menu_context = None
             try:
                 from src.services.api_menu_service import api_menu_service
