@@ -6,7 +6,7 @@ Handles AI conversations, speech-to-text, and text-to-speech processing.
 import os
 import logging
 import tempfile
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from openai import OpenAI
 from config.settings import settings
 
@@ -18,7 +18,7 @@ class OpenAIService:
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.model = settings.openai_model
         self.tts_model = settings.openai_tts_model
-        self.tts_voice = settings.openai_tts_voice
+        self.tts_voice = settings.openai_tts_voice  # Type will be validated by OpenAI API
         self.logger = logging.getLogger(__name__)
         
         # System prompt for the call answering agent
@@ -44,7 +44,7 @@ For menu-related questions, you have access to current menu information that wil
 
 Remember: Your responses will be converted to speech, so write them as you would speak them."""
 
-    def generate_response(self, user_message: str, conversation_history: List[Dict] = None, menu_context: str = None) -> str:
+    def generate_response(self, user_message: str, conversation_history: Optional[List[Dict[str, str]]] = None, menu_context: Optional[str] = None) -> str:
         """
         Generate AI response using OpenAI GPT.
         
@@ -58,7 +58,7 @@ Remember: Your responses will be converted to speech, so write them as you would
         """
         try:
             # Build conversation messages
-            messages = [{"role": "system", "content": self.system_prompt}]
+            messages: List[Dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
             
             # Add menu context if provided
             if menu_context:
@@ -77,16 +77,19 @@ Remember: Your responses will be converted to speech, so write them as you would
             # Generate response
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=messages,  # type: ignore
                 max_tokens=150,  # Keep responses concise for voice
                 temperature=0.7,
                 top_p=0.9
             )
             
-            ai_response = response.choices[0].message.content.strip()
-            self.logger.info(f"✅ AI response generated: {ai_response[:50]}...")
-            
-            return ai_response
+            ai_response = response.choices[0].message.content
+            if ai_response:
+                ai_response = ai_response.strip()
+                self.logger.info(f"✅ AI response generated: {ai_response[:50]}...")
+                return ai_response
+            else:
+                return "I apologize, but I'm having trouble processing your request right now. Please try again or hold for a human representative."
             
         except Exception as e:
             self.logger.error(f"❌ Error generating AI response: {str(e)}")
@@ -112,7 +115,8 @@ Remember: Your responses will be converted to speech, so write them as you would
                     response_format="text"
                 )
             
-            transcribed_text = transcript.strip()
+            # transcript is already a string when response_format="text"
+            transcribed_text = str(transcript).strip()
             self.logger.info(f"✅ Speech converted to text: {transcribed_text[:100]}...")
             
             return transcribed_text
@@ -121,7 +125,7 @@ Remember: Your responses will be converted to speech, so write them as you would
             self.logger.error(f"❌ Error converting speech to text: {str(e)}")
             return None
 
-    def text_to_speech(self, text: str, output_path: str = None) -> Optional[str]:
+    def text_to_speech(self, text: str, output_path: Optional[str] = None) -> Optional[str]:
         """
         Convert text to speech using OpenAI TTS.
         
@@ -143,7 +147,7 @@ Remember: Your responses will be converted to speech, so write them as you would
             # Generate speech
             response = self.client.audio.speech.create(
                 model=self.tts_model,
-                voice=self.tts_voice,
+                voice=self.tts_voice,  # type: ignore
                 input=text,
                 response_format="mp3"
             )
@@ -159,7 +163,7 @@ Remember: Your responses will be converted to speech, so write them as you would
             self.logger.error(f"❌ Error converting text to speech: {str(e)}")
             return None
 
-    def process_conversation_turn(self, user_input: str, conversation_history: List[Dict] = None) -> Tuple[str, List[Dict]]:
+    def process_conversation_turn(self, user_input: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Tuple[str, List[Dict[str, str]]]:
         """
         Process a complete conversation turn: generate AI response and update history.
         
