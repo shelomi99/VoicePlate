@@ -121,7 +121,7 @@ class RealtimeServer:
         
         # Welcome message
         response.say(
-            "Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.",
+            "Hi there! Thanks for calling Food Fusion. How can I assist you today?",
             voice=getattr(settings, 'voice_type', 'alice'),
             language='en-US'
         )
@@ -164,7 +164,7 @@ class RealtimeServer:
         
         # Welcome message
         response.say(
-            "Hi there! Thanks for calling Food Fusion. How can I assist you today? I can help you with the menu and answer any questions you have about our restaurant.",
+            "Hi there! Thanks for calling Food Fusion. How can I assist you today?",
             voice=getattr(settings, 'voice_type', 'alice'),
             language='en-US'
         )
