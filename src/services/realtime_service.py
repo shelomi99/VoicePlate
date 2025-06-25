@@ -591,24 +591,41 @@ Remember: Your responses will be converted to speech, so write them as you would
             message: Message dictionary to send
             session_id: Optional session identifier, uses first session if not provided
         """
-        # Get session
-        if session_id and session_id in self.sessions:
-            session = self.sessions[session_id]
+        session = None
+        
+        # Get session with better error handling
+        if session_id:
+            if session_id in self.sessions:
+                session = self.sessions[session_id]
+            else:
+                self.logger.error(f"❌ Session {session_id} not found. Available sessions: {list(self.sessions.keys())}")
+                return
         elif self.sessions:
             # Use first available session
             session = next(iter(self.sessions.values()))
+            self.logger.debug(f"🔄 Using first available session: {session.session_id}")
         else:
             self.logger.error("❌ No active sessions for sending message")
             return
         
-        if session.openai_ws and session.state == ConnectionState.CONNECTED:
-            try:
-                await session.openai_ws.send(json.dumps(message))
-                self.logger.debug(f"📤 Sent message to OpenAI: {message.get('type', 'unknown')}")
-            except Exception as e:
-                self.logger.error(f"❌ Error sending message: {e}")
-        else:
-            self.logger.error(f"❌ Session not connected for sending message")
+        # Check session state and connection
+        if not session.openai_ws:
+            self.logger.error(f"❌ No WebSocket connection for session {session.session_id}")
+            return
+            
+        if session.state != ConnectionState.CONNECTED:
+            self.logger.error(f"❌ Session {session.session_id} not connected (state: {session.state.value})")
+            return
+        
+        try:
+            message_str = json.dumps(message)
+            await session.openai_ws.send(message_str)
+            self.logger.debug(f"📤 Sent message to OpenAI session {session.session_id}: {message.get('type', 'unknown')}")
+        except ConnectionClosed:
+            self.logger.error(f"❌ OpenAI connection closed for session {session.session_id}")
+            session.state = ConnectionState.DISCONNECTED
+        except Exception as e:
+            self.logger.error(f"❌ Error sending message to session {session.session_id}: {e}")
 
     async def receive_message(self, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
@@ -620,31 +637,39 @@ Remember: Your responses will be converted to speech, so write them as you would
         Returns:
             Message dictionary or None if no message available
         """
-        # Get session
-        if session_id and session_id in self.sessions:
-            session = self.sessions[session_id]
+        session = None
+        
+        # Get session with better error handling
+        if session_id:
+            if session_id in self.sessions:
+                session = self.sessions[session_id]
+            else:
+                self.logger.error(f"❌ Session {session_id} not found for receiving. Available: {list(self.sessions.keys())}")
+                return None
         elif self.sessions:
             # Use first available session
             session = next(iter(self.sessions.values()))
         else:
-            self.logger.error("❌ No active sessions for receiving message")
             return None
         
-        if session.openai_ws and session.state == ConnectionState.CONNECTED:
-            try:
-                message_str = await session.openai_ws.recv()
-                message = json.loads(message_str)
-                self.logger.debug(f"📥 Received message from OpenAI: {message.get('type', 'unknown')}")
-                return message
-            except ConnectionClosed:
-                self.logger.warning(f"⚠️ OpenAI connection closed for session {session.session_id}")
-                session.state = ConnectionState.DISCONNECTED
-                return None
-            except Exception as e:
-                self.logger.error(f"❌ Error receiving message: {e}")
-                return None
-        else:
-            self.logger.error(f"❌ Session not connected for receiving message")
+        # Check session state and connection
+        if not session.openai_ws:
+            return None
+            
+        if session.state != ConnectionState.CONNECTED:
+            return None
+        
+        try:
+            message_str = await session.openai_ws.recv()
+            message = json.loads(message_str)
+            self.logger.debug(f"📥 Received message from OpenAI session {session.session_id}: {message.get('type', 'unknown')}")
+            return message
+        except ConnectionClosed:
+            self.logger.warning(f"⚠️ OpenAI connection closed for session {session.session_id}")
+            session.state = ConnectionState.DISCONNECTED
+            return None
+        except Exception as e:
+            self.logger.error(f"❌ Error receiving message from session {session.session_id}: {e}")
             return None
 
 # Global realtime service instance
