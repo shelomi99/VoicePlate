@@ -489,12 +489,12 @@ class RealtimeServer:
                     "input_audio_transcription": {"model": "whisper-1"},
                     "turn_detection": {
                         "type": settings.realtime_turn_detection,
-                        "threshold": 0.6,  # Slightly higher threshold for cleaner detection
-                        "prefix_padding_ms": 200,  # Reduced padding for faster response
-                        "silence_duration_ms": 800  # Longer silence for better conversation flow
+                        "threshold": 0.8,  # Higher threshold to reduce false interruptions
+                        "prefix_padding_ms": 300,  # More padding to prevent cutoffs
+                        "silence_duration_ms": 1200  # Longer silence required to detect turn end
                     },
                     "temperature": 0.7,  # Optimized for more natural conversation
-                    "max_response_output_tokens": 150,  # Shorter responses for voice
+                    "max_response_output_tokens": 300,  # Increased to allow complete responses
                     "tools": self._get_function_definitions()
                 }
             }
@@ -750,10 +750,42 @@ REMEMBER: Your job is to help customers by getting them accurate, real-time info
                     mark_name = data.get('mark', {}).get('name')
                     self.logger.debug(f"📍 Mark received for session {session_id}: {mark_name}")
                     
-                else:
-                    # Log other events for debugging
-                    self.logger.debug(f"📨 Received Twilio event: {event}")
-                        
+                elif event == 'response.audio_transcript.done':
+                    # Log the AI response transcript
+                    transcript = message.get('transcript', '')
+                    self.logger.info(f"🤖 AI said: {transcript}")
+                
+                elif event == 'response.done':
+                    # Response completely finished - log for monitoring
+                    self.logger.info(f"✅ Response completed for session {session_id}")
+                
+                elif event == 'response.audio.done':
+                    # Audio response stream completed
+                    self.logger.info(f"🔊 Audio response completed for session {session_id}")
+                
+                elif event == 'input_audio_buffer.speech_started':
+                    # User started speaking - may need to interrupt current response
+                    self.logger.debug(f"🎤 User started speaking in session {session_id}")
+                    # Note: OpenAI handles interruption automatically with server VAD
+                
+                elif event == 'input_audio_buffer.speech_stopped':
+                    # User stopped speaking
+                    self.logger.debug(f"🎤 User stopped speaking in session {session_id}")
+                
+                elif event == 'input_audio_buffer.committed':
+                    # User audio committed for processing
+                    self.logger.debug(f"🎤 User audio committed in session {session_id}")
+                
+                elif event == 'conversation.item.input_audio_transcription.completed':
+                    # Log user speech transcript
+                    transcript = message.get('transcript', '')
+                    self.logger.info(f"👤 User said: {transcript}")
+                
+                elif event == 'error':
+                    # Handle OpenAI errors
+                    error = message.get('error', {})
+                    self.logger.error(f"❌ OpenAI error in {session_id}: {error}")
+                
             except WebSocketDisconnect:
                 self.logger.info(f"📞 Twilio WebSocket disconnected for session {session_id}")
                 break
@@ -848,13 +880,26 @@ REMEMBER: Your job is to help customers by getting them accurate, real-time info
                     transcript = message.get('transcript', '')
                     self.logger.info(f"🤖 AI said: {transcript}")
                 
+                elif message_type == 'response.done':
+                    # Response completely finished - log for monitoring
+                    self.logger.info(f"✅ Response completed for session {session_id}")
+                
+                elif message_type == 'response.audio.done':
+                    # Audio response stream completed
+                    self.logger.info(f"🔊 Audio response completed for session {session_id}")
+                
                 elif message_type == 'input_audio_buffer.speech_started':
-                    # User started speaking
+                    # User started speaking - may need to interrupt current response
                     self.logger.debug(f"🎤 User started speaking in session {session_id}")
+                    # Note: OpenAI handles interruption automatically with server VAD
                 
                 elif message_type == 'input_audio_buffer.speech_stopped':
                     # User stopped speaking
                     self.logger.debug(f"🎤 User stopped speaking in session {session_id}")
+                
+                elif message_type == 'input_audio_buffer.committed':
+                    # User audio committed for processing
+                    self.logger.debug(f"🎤 User audio committed in session {session_id}")
                 
                 elif message_type == 'conversation.item.input_audio_transcription.completed':
                     # Log user speech transcript
@@ -1041,12 +1086,12 @@ REMEMBER: Your job is to help customers by getting them accurate, real-time info
                     "input_audio_transcription": {"model": "whisper-1"},
                     "turn_detection": {
                         "type": settings.realtime_turn_detection,
-                        "threshold": 0.6,
-                        "prefix_padding_ms": 200,
-                        "silence_duration_ms": 800
+                        "threshold": 0.8,  # Higher threshold to reduce false interruptions
+                        "prefix_padding_ms": 300,  # More padding to prevent cutoffs
+                        "silence_duration_ms": 1200  # Longer silence required to detect turn end
                     },
-                    "temperature": 0.7,
-                    "max_response_output_tokens": 150,
+                    "temperature": 0.7,  # Optimized for more natural conversation
+                    "max_response_output_tokens": 300,  # Increased to allow complete responses
                     "tools": self._get_function_definitions()
                 }
             }
